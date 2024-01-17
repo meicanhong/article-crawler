@@ -8,3 +8,4 @@ trafilatura==1.6.4
 htmldate==1.6.1
 courlan==0.9.5
 unstructured==0.11.8
+Flask==3.0.0

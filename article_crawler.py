@@ -76,11 +76,6 @@ class ArticleCrawler:
 
     def download_url(self, current_url):
         browser = self.tls.playwright.chromium.launch(
-            proxy={
-                "server": "brd.superproxy.io:22225",
-                "username": "brd-customer-hl_73aa00d6-zone-ai_crawler",
-                "password": "2xw8cw69dw7u"
-            },
             headless=True,
             args=['--disable-blink-features=AutomationControlled']  # 防止被检测
         )
@@ -195,6 +190,6 @@ class ArticleCrawler:
 
 
 if __name__ == '__main__':
-    url = 'https://www.newsbtc.com/wp-content/uploads/2024/01/a-101.png?resize=460%2C265&w=460'
+    url = 'https://followin.io/en'
     crawler = ArticleCrawler(url=url, max_sites=1, max_links_per_page=999, timeout=120, crawler_only_internal=False)
     crawler.run()

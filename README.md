@@ -19,7 +19,11 @@ pip install -r requirements.txt
 ```bash
 playwright install
 ```
-### 3. 运行
+### 3. 启动 MongoDB
+```bash
+docker-compose up -d
+```
+### 4. 运行
 ```bash
 python article_crawler.py
 ```
