@@ -15,6 +15,7 @@ from newspaper import Article
 from playwright.sync_api import sync_playwright
 
 from base_etl_item import BaseETLItem
+from constant import PROJECT_PATH
 
 logging.basicConfig(level=logging.INFO)
 
@@ -96,7 +97,7 @@ class ArticleCrawler:
                        "Safari/537.36"
         )
         # 添加反爬插件
-        context.add_init_script(path="stealth.min.js")
+        context.add_init_script(path=f"{PROJECT_PATH}/stealth.min.js")
 
         page = context.new_page()
 
