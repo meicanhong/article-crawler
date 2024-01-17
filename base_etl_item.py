@@ -5,12 +5,8 @@ import pymongo
 from feapder import UpdateItem
 from unstructured.cleaners.core import clean
 
-
-
-# import feapder.pipelines.mongo_pipeline.MongoPipeline
-
 class BaseETLItem(UpdateItem):
-    mongo_client = pymongo.MongoClient('mongodb://localhost:27017')
+    mongo_client = pymongo.MongoClient('mongodb://127.0.0.1:27017')
     __unique_key__ = ["website_url"]
 
     def __init__(self, collection_name=None):

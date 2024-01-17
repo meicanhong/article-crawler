@@ -18,7 +18,7 @@ from base_etl_item import BaseETLItem
 
 logging.basicConfig(level=logging.INFO)
 
-mongo_client = pymongo.MongoClient('mongodb://localhost:27017')
+mongo_client = pymongo.MongoClient('mongodb://127.0.0.1:27017')
 
 
 class Tls(threading.local):

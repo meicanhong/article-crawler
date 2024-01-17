@@ -7,10 +7,22 @@ services:
       - ./data:/data/db
     ports:
       - 27017:27017
-  redis:
-    image: redis:alpine
+    networks:
+      - crawler_network
+  crawler:
+    image: crawler:latest
     ports:
-      - 6379:6379
+      - "5000:5000"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - ENVIRONMENT=prod
     volumes:
-      - ./redis_data:/data
+      - .:/app/src
+    networks:
+      - crawler_network
 
+networks:
+  crawler_network:
+    driver: bridge

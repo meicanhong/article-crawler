@@ -1,8 +1,15 @@
+import logging
+
 from flask import Flask, jsonify, request
 
 from article_crawler import ArticleCrawler
 
 app = Flask(__name__)
+
+
+@app.route('/')
+def hello():
+    return "Hello World!"
 
 
 @app.route('/crawl', methods=['POST'])
@@ -18,6 +25,9 @@ def crawl():
     timeout = data.get('timeout', 60)
     crawler_only_internal = data.get('crawler_only_internal', True)
 
+    logging.info(f'Processing {url} with max_sites={max_sites}, max_links_per_page={max_links_per_page}, '
+                     f'timeout={timeout}, crawler_only_internal={crawler_only_internal}')
+
     crawler = ArticleCrawler(url=url, max_sites=max_sites, max_links_per_page=max_links_per_page,
                              timeout=timeout, crawler_only_internal=crawler_only_internal)
     crawler.run()
@@ -26,4 +36,5 @@ def crawl():
 
 
 if __name__ == '__main__':
-    app.run(port=5000)
+    app.logger.setLevel(logging.INFO)
+    app.run(host='0.0.0.0', port=5000)
