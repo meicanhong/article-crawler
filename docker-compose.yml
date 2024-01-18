@@ -22,6 +22,14 @@ services:
       - .:/app/src
     networks:
       - crawler_network
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: '8G'
+        reservations:
+          cpus: '4'
+          memory: '8G'
 
 networks:
   crawler_network:
