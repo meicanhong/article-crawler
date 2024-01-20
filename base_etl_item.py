@@ -1,12 +1,16 @@
 import logging
+import re
 from urllib.parse import urlparse
-
 import pymongo
+from dateutil.parser import parser
 from feapder import UpdateItem
 from unstructured.cleaners.core import clean
 
+from config import project_config
+
+
 class BaseETLItem(UpdateItem):
-    mongo_client = pymongo.MongoClient('mongodb://127.0.0.1:27017')
+    mongo_client = pymongo.MongoClient(project_config.mongodb_url)
     __unique_key__ = ["website_url"]
 
     def __init__(self, collection_name=None):
@@ -32,18 +36,21 @@ class BaseETLItem(UpdateItem):
         try:
             self.verify()
             self.clean()
-            self.collection.update_one(filter={"website_url": self.website_url}, update={"$set": self.doc_to_dict()}, upsert=True)
+            self.collection.update_one(filter={"website_url": self.website_url}, update={"$set": self.doc_to_dict()},
+                                       upsert=True)
+            logging.info(f'update_one success: {self.website_url} {self.headline} {self.published_at}')
         except Exception as e:
-            logging.error(f'update_one error: {e}')
+            logging.error(f'{self.website_url} update_one error: {e}')
 
     def verify(self):
         if (self.website is None or self.website_url is None
                 or self.contents is None or self.source is None or self.created_at is None or self.updated_at is None
                 or self.published_at is None):
-            raise ValueError("website, website_url, contents, source, created_at, updated_at, published_at can't be "
-                             "None")
+            raise ValueError(
+                f"{self.website_url}: website, website_url, contents, source, created_at, updated_at, published_at can't be "
+                "None")
         if self.contents == '':
-            raise ValueError("contents can't be empty")
+            raise ValueError(f"{self.website_url} contents can't be empty")
 
     def clean(self):
         try:
@@ -53,13 +60,35 @@ class BaseETLItem(UpdateItem):
                     content['content'] = clean(content['content'], bullets=True, dashes=True)
             self.contents = contents
 
+            # website 变为域名
             url = self.website_url
             parsed_url = urlparse(url)
             domain = parsed_url.netloc
             self.website = domain
 
+            # published_at 变为datetime
+            if type(self.published_at) == str:
+                self.published_at = parser().parse(self.published_at)
+
+            # author 变为字符串
+            author = self.author
+            if type(author) == list:
+                author = ', '.join(author)
+            match_result = re.search(r'([^\s]+)', author)
+            if match_result is not None:
+                author = match_result.group(1)
+            author = clean(author, bullets=True, dashes=True)
+            self.author = author
+
+            # tags摊平列表
+            tags = self.tags
+            new_tags = {item for tag in tags if isinstance(tag, (list, str)) for item in
+                        (tag if isinstance(tag, list) else re.split(r'[,\s]+', tag))}
+            self.tags = list(new_tags)
+
+
         except Exception as e:
-            logging.error(f'clean error: {e}, contents: {self.contents}')
+            logging.error(f'{self.website_url} clean error: {e}')
 
     def doc_to_dict(self):
         return {
