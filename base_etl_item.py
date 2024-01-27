@@ -1,17 +1,13 @@
 import logging
 import re
 from urllib.parse import urlparse
-import pymongo
 from dateutil.parser import parser
 from unstructured.cleaners.core import clean
-from config import project_config
+from factory import mongo_client
 
 
 class BaseETLItem:
-    mongo_client = pymongo.MongoClient(project_config.mongodb_url)
-    __unique_key__ = ["website_url"]
-
-    def __init__(self, collection_name=None):
+    def __init__(self):
         self.subtype = None
         self.created_at = None
         self.updated_at = None
@@ -28,7 +24,7 @@ class BaseETLItem:
         self.published_at = None
         self.source = None
         self.language = None
-        self.collection = self.mongo_client["ai_qa"][collection_name]
+        self.collection = mongo_client["ai_qa"]["crawler_raw_data"]
 
     def update_one(self):
         try:

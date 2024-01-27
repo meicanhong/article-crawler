@@ -7,21 +7,14 @@ from datetime import datetime
 from queue import Queue
 from time import sleep
 from urllib.parse import urljoin, urlparse
-import pymongo
-import trafilatura
 from bs4 import BeautifulSoup
 from courlan import validate_url, scrub_url, clean_url, is_external
-from htmldate import find_date
-from newspaper import Article
 from playwright.sync_api import sync_playwright
-
-from base_etl_item import BaseETLItem
-from config import project_config
+from article_parser import ArticleParser
 from constant import PROJECT_PATH
+from factory import mongo_client
 
 logging.basicConfig(level=logging.INFO)
-
-mongo_client = pymongo.MongoClient(project_config.mongodb_url)
 
 
 class Tls(threading.local):
@@ -52,7 +45,7 @@ class ArticleCrawler:
         self.crawler_only_internal = crawler_only_internal
         self.match_url = match_url
         self.black_website = black_website
-        self.etl_data_collection_name = 'crawler_etl_data'
+        self.article_parser = ArticleParser()
         self.raw_data_collection = mongo_client["ai_qa"]["crawler_raw_data"]
 
     def run(self):
@@ -76,7 +69,6 @@ class ArticleCrawler:
                     futures.remove(future)
                 sleep(5)
 
-
     def process_single_url(self, url, depth):
         try:
             if url in self.visited_urls:
@@ -95,7 +87,7 @@ class ArticleCrawler:
             # 保存原始的HTML
             self.save_raw_html(url, content)
             # 解析网页
-            doc = self.parse_website(url, content)
+            doc = self.article_parser.parse_html(url, content)
             # 黑名单过滤, 不保存黑名单中的网站
             if self.black_website is not None:
                 black_pattern = re.compile(self.black_website)
@@ -207,45 +199,6 @@ class ArticleCrawler:
         logging.info(f"Crawled Queue:{self.url_queue.qsize()}, Success: {self.sites_count}")
 
         return urls
-
-    def parse_website(self, url, content):
-        article = Article(url)
-        article.download(content)
-        article.parse()
-        published_date = article.publish_date
-        if published_date is None or published_date == '':
-            published_date = find_date(htmlobject=content, outputformat="%Y-%m-%d %H:%M:%S")
-
-        text = trafilatura.extract(filecontent=content, include_comments=True, include_images=True)
-        metadata = trafilatura.extract_metadata(filecontent=content)
-        if metadata:
-            tags = list(article.tags)
-            if tags is None or len(tags) == 0:
-                tags = metadata.tags
-
-            author = metadata.author
-        else:
-            tags = list(article.tags)
-            author = article.authors
-        if author is None or len(author) == 0:
-            element = BeautifulSoup(content, 'html.parser').find('span', class_='text-text1 text-lg font-medium')
-            if element is not None:
-                author = element.text
-
-        doc = BaseETLItem(collection_name=self.etl_data_collection_name)
-        doc.website = url
-        doc.website_url = url
-        doc.headline = article.title
-        doc.description = article.text[:200]
-        doc.contents = [{"type": "text", "content": text}]
-        doc.author = author
-        doc.source = self.type
-        doc.language = article.meta_lang
-        doc.tags = tags
-        doc.created_at = datetime.utcnow()
-        doc.updated_at = datetime.utcnow()
-        doc.published_at = published_date
-        return doc
 
     def add_urls(self, url):
         if self.sites_count >= self.max_sites:
