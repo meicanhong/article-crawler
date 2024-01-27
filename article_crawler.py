@@ -28,25 +28,39 @@ class PlaywrightInstance(threading.local):
 
 
 class ArticleCrawler:
-
     def __init__(self, start_url, max_pages=1, request_timeout=60, concurrency=1, crypto_only_same_domain=False,
                  include_urls=None, exclude_urls=None, max_recursion_depth=2, url_min_length=15):
-        self.tls = PlaywrightInstance()
-        self.start_url = start_url
-        self.max_pages = max_pages
-        self.request_timeout = request_timeout
-        self.concurrency = concurrency
-        self.crypto_only_same_domain = crypto_only_same_domain
-        self.include_urls = include_urls
-        self.exclude_urls = exclude_urls
-        self.max_recursion_depth = max_recursion_depth
-        self.url_min_length = url_min_length
+        """
+        Initializes the ArticleCrawler object.
 
-        self.visited_urls = set()
-        self.url_queue = Queue()
-        self.success_page_count = 0
-        self.lock = threading.Lock()
-        self.raw_data_collection = mongo_client["ai_qa"]["crawler_raw_data"]
+        Args:
+            start_url (str): The starting URL for the crawler.
+            max_pages (int, optional): The maximum number of pages to crawl. Defaults to 1.
+            request_timeout (int, optional): The maximum time to wait for a page to load, in seconds. Defaults to 60.
+            concurrency (int, optional): The number of concurrent threads to use for crawling. Defaults to 1.
+            crypto_only_same_domain (bool, optional): If True, only crawl pages from the same domain as the start_url. Defaults to False.
+            include_urls (str, optional): A regex pattern of URLs to include in the crawl. Defaults to None.
+            exclude_urls (str, optional): A regex pattern of URLs to exclude from the crawl. Defaults to None.
+            max_recursion_depth (int, optional): The maximum depth of recursion for the crawler. Defaults to 2.
+            url_min_length (int, optional): The minimum length of a URL to be considered for crawling. Defaults to 15.
+        """
+
+        self.tls = PlaywrightInstance()  # Instance of Playwright for web scraping
+        self.start_url = start_url  # The starting URL for the crawler
+        self.max_pages = max_pages  # The maximum number of pages to crawl
+        self.request_timeout = request_timeout  # The maximum time to wait for a page to load, in seconds
+        self.concurrency = concurrency  # The number of concurrent threads to use for crawling
+        self.crypto_only_same_domain = crypto_only_same_domain  # If True, only crawl pages from the same domain as the start_url
+        self.include_urls = include_urls  # A regex pattern of URLs to include in the crawl
+        self.exclude_urls = exclude_urls  # A regex pattern of URLs to exclude from the crawl
+        self.max_recursion_depth = max_recursion_depth  # The maximum depth of recursion for the crawler
+        self.url_min_length = url_min_length  # The minimum length of a URL to be considered for crawling
+
+        self.visited_urls = set()  # A set of URLs that have already been visited
+        self.url_queue = Queue()  # A queue of URLs to be visited
+        self.success_page_count = 0  # The number of pages that have been successfully crawled
+        self.lock = threading.Lock()  # A lock for thread-safe operations
+        self.raw_data_collection = mongo_client["ai_qa"]["crawler_raw_data"]  # MongoDB collection for storing raw data
 
     def run(self):
         futures = []
@@ -208,6 +222,6 @@ class ArticleCrawler:
 
 
 if __name__ == '__main__':
-    url = 'https://followin.io/en/feed/7761374'
+    url = 'https://followin.io/en'
     crawler = ArticleCrawler(start_url=url, max_pages=5)
     crawler.run()
