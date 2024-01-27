@@ -37,12 +37,13 @@ class Tls(threading.local):
 class ArticleCrawler:
 
     def __init__(self, url, type='article', max_sites=50, max_links_per_page=10, timeout=60, crawler_only_internal=True,
-                 match_url=None, black_website=None):
+                 match_url=None, black_website=None, max_recursion_depth=2):
         self.tls = Tls()
         self.url = url
         self.type = type
         self.max_sites = max_sites
         self.max_links_per_page = max_links_per_page
+        self.max_recursion_depth = max_recursion_depth
         self.visited_urls = set()
         self.url_queue = Queue()
         self.sites_count = 0
@@ -56,28 +57,31 @@ class ArticleCrawler:
 
     def run(self):
         futures = []
-        self.url_queue.put(self.url)
+        self.url_queue.put((self.url, 1))  # Add depth information to the queue
         with ThreadPoolExecutor(max_workers=1) as executor:
             while self.sites_count < self.max_sites:
                 try:
-                    current_url = self.url_queue.get_nowait()
+                    current_url, depth = self.url_queue.get_nowait()
                 except:
-                    current_url = None
+                    current_url, depth = None, 0
                 if current_url:
-                    future = executor.submit(self.process_single_url, current_url)
+                    future = executor.submit(self.process_single_url, current_url, depth)
                     futures.append(future)
-                else:
-                    done, not_done = wait(futures, timeout=3, return_when=FIRST_COMPLETED)
-                    for future in done:
-                        future.result()
-                        futures.remove(future)
-                    sleep(5)
+                    continue
+                done, not_done = wait(futures, timeout=3, return_when=FIRST_COMPLETED)
+                if len(futures) == 0:
+                    break
+                for future in done:
+                    future.result()
+                    futures.remove(future)
+                sleep(5)
 
-    def process_single_url(self, url):
+
+    def process_single_url(self, url, depth):
         try:
             if url in self.visited_urls:
                 return
-            if self.sites_count >= self.max_sites:
+            if self.sites_count >= self.max_sites or depth > self.max_recursion_depth:
                 return
             logging.info(f"Processing {url}")
             # 下载网页
@@ -87,7 +91,7 @@ class ArticleCrawler:
             # 将当前页面中的链接加入到队列中
             links = self.extract_links(html=content, url=url)
             for link in links:
-                self.add_urls(link)
+                self.add_urls((link, depth + 1))
             # 保存原始的HTML
             self.save_raw_html(url, content)
             # 解析网页
@@ -257,6 +261,6 @@ class ArticleCrawler:
 
 if __name__ == '__main__':
     url = 'https://followin.io/en'
-    crawler = ArticleCrawler(url=url, type='news', max_sites=1, max_links_per_page=1,
+    crawler = ArticleCrawler(url=url, type='news', max_sites=5, max_links_per_page=5,
                              timeout=60, crawler_only_internal=False)
     crawler.run()
