@@ -29,6 +29,10 @@ class Tls(threading.local):
         self.playwright = sync_playwright().start()
         print("Create playwright instance in Thread", threading.current_thread().name)
 
+    def __del__(self):
+        self.playwright.stop()
+        print("Stop playwright instance in Thread", threading.current_thread().name)
+
 
 class ArticleCrawler:
 
@@ -89,9 +93,10 @@ class ArticleCrawler:
             # 解析网页
             doc = self.parse_website(url, content)
             # 黑名单过滤, 不保存黑名单中的网站
-            black_pattern = re.compile(self.black_website)
-            if black_pattern.match(url):
-                return None
+            if self.black_website is not None:
+                black_pattern = re.compile(self.black_website)
+                if black_pattern.match(url):
+                    return None
             # 保存解析后的数据
             doc.update_one()
             self.increase_sites_count()
@@ -100,37 +105,52 @@ class ArticleCrawler:
             raise e
 
     def download_url(self, current_url):
-        browser = self.tls.playwright.chromium.launch(
-            headless=False,
-            args=['--disable-blink-features=AutomationControlled']  # 防止被检测
-        )
-        context = browser.new_context(
-            viewport={"width": 1920, "height": 1080},
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 "
-                       "Safari/537.36"
-        )
-        # 添加反爬插件
-        context.add_init_script(path=f"{PROJECT_PATH}/stealth.min.js")
+        browser = None
+        context = None
+        page = None
+        try:
+            browser = self.tls.playwright.chromium.launch(
+                headless=True,
+                args=['--disable-blink-features=AutomationControlled']  # 防止被检测
+            )
+            context = browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 "
+                           "Safari/537.36"
+            )
+            # 添加反爬插件
+            context.add_init_script(path=f"{PROJECT_PATH}/stealth.min.js")
 
-        page = context.new_page()
+            page = context.new_page()
 
-        page.goto(current_url, timeout=self.timeout * 1000, wait_until='domcontentloaded')
+            page.goto(current_url, timeout=self.timeout * 1000, wait_until='domcontentloaded')
 
-        scroll_height = 30000  # 替换为您想要的滚动高度
-        scroll_height_unit = 10000  # 替换为您想要的滚动高度单位
-        current_height = 0
-        for i in range(0, scroll_height, scroll_height_unit):
-            current_height += scroll_height_unit
-            # 滚动到指定高度
-            page.evaluate(f"window.scrollTo(0, {current_height});")
-            # 等待一段时间
-            wait_time = 1000  # 替换为您想要等待的时间（毫秒）
-            page.wait_for_timeout(wait_time)
+            scroll_height = 30000  # 替换为您想要的滚动高度
+            scroll_height_unit = 10000  # 替换为您想要的滚动高度单位
+            current_height = 0
+            for i in range(0, scroll_height, scroll_height_unit):
+                current_height += scroll_height_unit
+                # 滚动到指定高度
+                page.evaluate(f"window.scrollTo(0, {current_height});")
+                # 等待一段时间
+                wait_time = 1000  # 替换为您想要等待的时间（毫秒）
+                page.wait_for_timeout(wait_time)
 
-        content = page.content()
-        page.close()
-        browser.close()
-        return content
+            content = page.content()
+            return content
+        except Exception as e:
+            if str(e).__contains__('Timeout'):
+                logging.error(f"Timeout downloading URL '{current_url}': {e}")
+                return None
+            logging.error(f"Error downloading URL '{current_url}': {e}")
+            raise e
+        finally:
+            if page is not None:
+                page.close()
+            if context is not None:
+                context.close()
+            if browser is not None:
+                browser.close()
 
     def save_raw_html(self, url, content):
         doc = {
@@ -238,6 +258,6 @@ class ArticleCrawler:
 
 if __name__ == '__main__':
     url = 'https://followin.io/en'
-    crawler = ArticleCrawler(url=url, type='news', max_sites=100, max_links_per_page=999,
+    crawler = ArticleCrawler(url=url, type='news', max_sites=1, max_links_per_page=1,
                              timeout=60, crawler_only_internal=False)
     crawler.run()
