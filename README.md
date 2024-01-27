@@ -1,6 +1,6 @@
 # ArticleCrawler
 
-ArticleCrawler is a scalable, automated crawler designed to extract and parse articles from websites. It uses the Playwright library for web scraping, BeautifulSoup for HTML parsing, and stores the raw HTML data in a MongoDB collection.
+ArticleCrawler is a scalable, automated crawler designed to extract and parse articles from websites. It uses the Playwright library for web scraping, BeautifulSoup for HTML parsing, and stores data in a MongoDB collection.
 
 ## Features
 
