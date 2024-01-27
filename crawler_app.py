@@ -28,8 +28,8 @@ def crawl():
     logging.info(f'Processing {url} with max_sites={max_sites}, max_links_per_page={max_links_per_page}, '
                      f'timeout={timeout}, crawler_only_internal={crawler_only_internal}')
 
-    crawler = ArticleCrawler(url=url, max_sites=max_sites, max_links_per_page=max_links_per_page,
-                             timeout=timeout, crawler_only_internal=crawler_only_internal)
+    crawler = ArticleCrawler(start_url=url, max_pages=max_sites, max_links_per_page=max_links_per_page,
+                             request_timeout=timeout, crypto_only_same_domain=crawler_only_internal)
     crawler.run()
 
     return jsonify({'message': 'Crawling initiated successfully'}), 200

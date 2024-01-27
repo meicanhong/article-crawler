@@ -10,14 +10,14 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from courlan import validate_url, scrub_url, clean_url, is_external
 from playwright.sync_api import sync_playwright
-from article_parser import ArticleParser
+from article_parser import parse_html, remove_irrelevant_html_elements
 from constant import PROJECT_PATH
 from factory import mongo_client
 
 logging.basicConfig(level=logging.INFO)
 
 
-class Tls(threading.local):
+class PlaywrightInstance(threading.local):
     def __init__(self):
         self.playwright = sync_playwright().start()
         print("Create playwright instance in Thread", threading.current_thread().name)
@@ -29,30 +29,30 @@ class Tls(threading.local):
 
 class ArticleCrawler:
 
-    def __init__(self, url, type='article', max_sites=50, max_links_per_page=10, timeout=60, crawler_only_internal=True,
-                 match_url=None, black_website=None, max_recursion_depth=2):
-        self.tls = Tls()
-        self.url = url
-        self.type = type
-        self.max_sites = max_sites
-        self.max_links_per_page = max_links_per_page
+    def __init__(self, start_url, max_pages=1, request_timeout=60, concurrency=1, crypto_only_same_domain=False,
+                 include_urls=None, exclude_urls=None, max_recursion_depth=2, url_min_length=15):
+        self.tls = PlaywrightInstance()
+        self.start_url = start_url
+        self.max_pages = max_pages
+        self.request_timeout = request_timeout
+        self.concurrency = concurrency
+        self.crypto_only_same_domain = crypto_only_same_domain
+        self.include_urls = include_urls
+        self.exclude_urls = exclude_urls
         self.max_recursion_depth = max_recursion_depth
+        self.url_min_length = url_min_length
+
         self.visited_urls = set()
         self.url_queue = Queue()
-        self.sites_count = 0
+        self.success_page_count = 0
         self.lock = threading.Lock()
-        self.timeout = timeout
-        self.crawler_only_internal = crawler_only_internal
-        self.match_url = match_url
-        self.black_website = black_website
-        self.article_parser = ArticleParser()
         self.raw_data_collection = mongo_client["ai_qa"]["crawler_raw_data"]
 
     def run(self):
         futures = []
-        self.url_queue.put((self.url, 1))  # Add depth information to the queue
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            while self.sites_count < self.max_sites:
+        self.url_queue.put((self.start_url, 1))
+        with ThreadPoolExecutor(max_workers=self.concurrency) as executor:
+            while self.success_page_count < self.max_pages:
                 try:
                     current_url, depth = self.url_queue.get_nowait()
                 except:
@@ -71,28 +71,21 @@ class ArticleCrawler:
 
     def process_single_url(self, url, depth):
         try:
-            if url in self.visited_urls:
+            if url in self.visited_urls or self.success_page_count >= self.max_pages or depth > self.max_recursion_depth:
                 return
-            if self.sites_count >= self.max_sites or depth > self.max_recursion_depth:
+            logging.info(f"Processing {url}, Success crawled: {self.success_page_count}, "
+                         f"Total crawled: {len(self.visited_urls)}")
+            content = self.download_pages(url)
+            if content is None:
                 return
-            logging.info(f"Processing {url}")
-            # 下载网页
-            content = self.download_url(url)
-            # 记录已经访问过的URL
-            self.visited_urls.add(url)
-            # 将当前页面中的链接加入到队列中
+            content = remove_irrelevant_html_elements(content)
             links = self.extract_links(html=content, url=url)
             for link in links:
-                self.add_urls((link, depth + 1))
-            # 保存原始的HTML
+                self.add_queue_urls(link, depth + 1)
             self.save_raw_html(url, content)
-            # 解析网页
-            doc = self.article_parser.parse_html(url, content)
-            # 黑名单过滤, 不保存黑名单中的网站
-            if self.black_website is not None:
-                black_pattern = re.compile(self.black_website)
-                if black_pattern.match(url):
-                    return None
+            if self.is_exclude_url(url):
+                return
+            doc = parse_html(url, content)
             # 保存解析后的数据
             result = doc.update_one()
             if result is not None:
@@ -101,7 +94,7 @@ class ArticleCrawler:
             logging.error(e)
             raise e
 
-    def download_url(self, current_url):
+    def download_pages(self, current_url):
         browser = None
         context = None
         page = None
@@ -120,7 +113,7 @@ class ArticleCrawler:
 
             page = context.new_page()
 
-            page.goto(current_url, timeout=self.timeout * 1000, wait_until='domcontentloaded')
+            page.goto(current_url, timeout=self.request_timeout * 1000, wait_until='domcontentloaded')
 
             scroll_height = 10000  # 替换为您想要的滚动高度
             scroll_height_unit = 400  # 替换为您想要的滚动高度单位
@@ -141,6 +134,7 @@ class ArticleCrawler:
             logging.error(f"Error downloading URL '{current_url}': {e}")
             raise e
         finally:
+            self.add_visited_url(current_url)
             if page is not None:
                 page.close()
             if context is not None:
@@ -160,11 +154,6 @@ class ArticleCrawler:
 
     def extract_links(self, url, html):
         soup = BeautifulSoup(html, 'html.parser')
-        tags_to_remove = ['nav', 'footer', 'script', 'style', 'noscript', 'svg']
-        # 移除指定的标签
-        for tag in tags_to_remove:
-            for t in soup.find_all(tag):
-                t.extract()
         urls = []
         for link in soup.find_all('a'):
             href: str = link.get('href')
@@ -178,44 +167,47 @@ class ArticleCrawler:
                 continue
             href = scrub_url(href)
             href = clean_url(href)
-            if self.crawler_only_internal and is_external(href, self.url):
-                continue
-            if href in self.visited_urls:
-                continue
-            if self.match_url is not None:
-                url_pattern = re.compile(self.match_url)
-                if not url_pattern.match(href):
-                    continue
-            # path长度小于15，大概率不是文章
-            url_obj = urlparse(href)
-            if url_obj.path is None or len(url_obj.path) < 10:
-                continue
             urls.append(href)
 
         urls = list(set(urls))
         urls.sort(key=lambda x: len(x), reverse=True)
-        urls = urls[:self.max_links_per_page]
-
-        logging.info(f"Crawled Queue:{self.url_queue.qsize()}, Success: {self.sites_count}")
-
         return urls
 
-    def add_urls(self, url):
-        if self.sites_count >= self.max_sites:
+    def add_queue_urls(self, url, depth):
+        if self.success_page_count >= self.max_pages or url in self.visited_urls:
             return
-        if url in self.visited_urls:
+        if self.url_queue.qsize() >= self.max_pages * 2:
             return
-        if self.url_queue.qsize() >= self.max_sites * 2:
+        if self.crypto_only_same_domain and is_external(url, self.start_url):
             return
-        self.url_queue.put(url, block=False)
+        if self.include_urls is not None:
+            url_pattern = re.compile(self.include_urls)
+            if not url_pattern.match(url):
+                return
+        # path长度小于15，大概率不是文章
+        url_obj = urlparse(url)
+        if url_obj.path is None or len(url_obj.path) < self.url_min_length:
+            return
+        self.url_queue.put((url, depth), block=False)
+
+    def is_exclude_url(self, url):
+        if self.exclude_urls is None:
+            return False
+        black_pattern = re.compile(self.exclude_urls)
+        if black_pattern.match(url):
+            return True
+        return False
 
     def increase_sites_count(self):
         with self.lock:
-            self.sites_count += 1
+            self.success_page_count += 1
+
+    def add_visited_url(self, url):
+        with self.lock:
+            self.visited_urls.add(url)
 
 
 if __name__ == '__main__':
-    url = 'https://followin.io/en'
-    crawler = ArticleCrawler(url=url, type='news', max_sites=5, max_links_per_page=5,
-                             timeout=60, crawler_only_internal=False)
+    url = 'https://followin.io/en/feed/7761374'
+    crawler = ArticleCrawler(start_url=url, max_pages=5)
     crawler.run()
