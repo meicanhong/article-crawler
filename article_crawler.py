@@ -125,16 +125,15 @@ class ArticleCrawler:
 
             page.goto(current_url, timeout=self.timeout * 1000, wait_until='domcontentloaded')
 
-            scroll_height = 30000  # 替换为您想要的滚动高度
-            scroll_height_unit = 10000  # 替换为您想要的滚动高度单位
+            scroll_height = 10000  # 替换为您想要的滚动高度
+            scroll_height_unit = 400  # 替换为您想要的滚动高度单位
             current_height = 0
             for i in range(0, scroll_height, scroll_height_unit):
                 current_height += scroll_height_unit
                 # 滚动到指定高度
                 page.evaluate(f"window.scrollTo(0, {current_height});")
                 # 等待一段时间
-                wait_time = 1000  # 替换为您想要等待的时间（毫秒）
-                page.wait_for_timeout(wait_time)
+                page.wait_for_timeout(200)
 
             content = page.content()
             return content
