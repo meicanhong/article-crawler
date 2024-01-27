@@ -31,10 +31,10 @@ class Tls(threading.local):
 
 
 class ArticleCrawler:
-    tls = Tls()
 
     def __init__(self, url, type='article', max_sites=50, max_links_per_page=10, timeout=60, crawler_only_internal=True,
                  match_url=None, black_website=None):
+        self.tls = Tls()
         self.url = url
         self.type = type
         self.max_sites = max_sites
