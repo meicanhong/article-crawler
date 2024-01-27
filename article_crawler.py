@@ -102,8 +102,9 @@ class ArticleCrawler:
                 if black_pattern.match(url):
                     return None
             # 保存解析后的数据
-            doc.update_one()
-            self.increase_sites_count()
+            result = doc.update_one()
+            if result is not None:
+                self.increase_sites_count()
         except Exception as e:
             logging.error(e)
             raise e
@@ -212,23 +213,24 @@ class ArticleCrawler:
         article.download(content)
         article.parse()
         published_date = article.publish_date
-        if published_date is None:
+        if published_date is None or published_date == '':
             published_date = find_date(htmlobject=content, outputformat="%Y-%m-%d %H:%M:%S")
 
-        text = trafilatura.extract(filecontent=content, include_comments=True, include_images=False)
+        text = trafilatura.extract(filecontent=content, include_comments=True, include_images=True)
         metadata = trafilatura.extract_metadata(filecontent=content)
-        tags = list(article.tags)
-        if tags is None or len(tags) == 0:
-            tags = metadata.tags
+        if metadata:
+            tags = list(article.tags)
+            if tags is None or len(tags) == 0:
+                tags = metadata.tags
 
-        author = metadata.author
+            author = metadata.author
+        else:
+            tags = list(article.tags)
+            author = article.authors
         if author is None or len(author) == 0:
-            if metadata.author is not None:
-                author = article.author
-            else:
-                element = BeautifulSoup(content, 'html.parser').find('span', class_='text-text1 text-lg font-medium')
-                if element is not None:
-                    author = element.text
+            element = BeautifulSoup(content, 'html.parser').find('span', class_='text-text1 text-lg font-medium')
+            if element is not None:
+                author = element.text
 
         doc = BaseETLItem(collection_name=self.etl_data_collection_name)
         doc.website = url

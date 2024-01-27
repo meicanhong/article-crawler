@@ -3,13 +3,11 @@ import re
 from urllib.parse import urlparse
 import pymongo
 from dateutil.parser import parser
-from feapder import UpdateItem
 from unstructured.cleaners.core import clean
-
 from config import project_config
 
 
-class BaseETLItem(UpdateItem):
+class BaseETLItem:
     mongo_client = pymongo.MongoClient(project_config.mongodb_url)
     __unique_key__ = ["website_url"]
 
@@ -36,19 +34,28 @@ class BaseETLItem(UpdateItem):
         try:
             self.verify()
             self.clean()
-            self.collection.update_one(filter={"website_url": self.website_url}, update={"$set": self.doc_to_dict()},
+
+            # Try to get the document from the database
+            doc = self.collection.find_one({"website_url": self.website_url})
+
+            # If the document exists, get its created_at
+            if doc is not None:
+                self.created_at = doc.get('created_at')
+
+            doc = self.collection.update_one(filter={"website_url": self.website_url}, update={"$set": self.doc_to_dict()},
                                        upsert=True)
             logging.info(f'update_one success: {self.website_url} {self.headline} {self.published_at}')
+            return doc
         except Exception as e:
             logging.error(f'{self.website_url} update_one error: {e}')
 
     def verify(self):
-        if (self.website is None or self.website_url is None
-                or self.contents is None or self.source is None or self.created_at is None or self.updated_at is None
-                or self.published_at is None):
+        fields_to_check = [self.website, self.website_url, self.contents, self.source, self.created_at, self.updated_at,
+                           self.published_at]
+        if not all(fields_to_check) or self.contents == '':
             raise ValueError(
-                f"{self.website_url}: website, website_url, contents, source, created_at, updated_at, published_at can't be "
-                "None")
+                f"{self.website_url}: website, website_url, contents, source, created_at, updated_at, published_at "
+                f"can't be None or empty")
         if self.contents == '':
             raise ValueError(f"{self.website_url} contents can't be empty")
 
@@ -57,7 +64,7 @@ class BaseETLItem(UpdateItem):
             contents = self.contents
             for content in contents:
                 if content['type'] == 'text':
-                    content['content'] = clean(content['content'], bullets=True, dashes=True)
+                    content['content'] = clean(str(content['content']), bullets=True, dashes=True)
             self.contents = contents
 
             # website 变为域名
