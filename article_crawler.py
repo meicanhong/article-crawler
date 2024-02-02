@@ -219,9 +219,3 @@ class ArticleCrawler:
     def add_visited_url(self, url):
         with self.lock:
             self.visited_urls.add(url)
-
-
-if __name__ == '__main__':
-    url = 'https://followin.io/en/feed/7757723'
-    crawler = ArticleCrawler(start_url=url, max_pages=1)
-    crawler.run()

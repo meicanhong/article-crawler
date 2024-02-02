@@ -24,7 +24,7 @@ class BaseETLItem:
         self.published_at = None
         self.source = None
         self.language = None
-        self.collection = mongo_client["ai_qa"]["crawler_raw_data"]
+        self.collection = mongo_client["ai_qa"]["crawler_extract_data"]
 
     def update_one(self):
         try:

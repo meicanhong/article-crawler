@@ -85,7 +85,7 @@ def remove_irrelevant_html_elements(html: str) -> str:
     soup = BeautifulSoup(html, 'html.parser')
 
     # List of tags to remove
-    tags_to_remove = ['nav', 'footer', 'script', 'style', 'noscript', 'svg']
+    tags_to_remove = ['nav', 'footer', 'script', 'style', 'noscript', 'svg', 'aside', 'header']
 
     # Remove specified tags
     for tag in tags_to_remove:
@@ -112,8 +112,8 @@ def html_is_table(html: str):
     # text 中逗号和句号的数量
     nums_comma = html.count(',')
     html_len = len(html)
-    threshold = html_len * 0.002
+    threshold = html_len * 0.001
     # 向上取整
     threshold = int(threshold)
     # 如果文本长度大于 50 个字符并且逗号和句号的数量大于 5 个，那么就不是表格
-    return not (len(html) > 50 and nums_comma >= threshold)
+    return not (len(html) > 50 and nums_comma > threshold)
