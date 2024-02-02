@@ -38,19 +38,19 @@ class BaseETLItem:
             if doc is not None:
                 self.created_at = doc.get('created_at')
 
-            doc = self.collection.update_one(filter={"website_url": self.website_url}, update={"$set": self.doc_to_dict()},
-                                       upsert=True)
+            doc = self.collection.update_one(filter={"website_url": self.website_url},
+                                             update={"$set": self.doc_to_dict()},
+                                             upsert=True)
             logging.info(f'update_one success: {self.website_url} {self.headline} {self.published_at}')
             return doc
         except Exception as e:
             logging.error(f'{self.website_url} update_one error: {e}')
 
     def verify(self):
-        fields_to_check = [self.website, self.website_url, self.contents, self.source, self.created_at, self.updated_at,
-                           self.published_at]
+        fields_to_check = [self.website, self.website_url, self.contents, self.created_at, self.updated_at]
         if not all(fields_to_check) or self.contents == '':
             raise ValueError(
-                f"{self.website_url}: website, website_url, contents, source, created_at, updated_at, published_at "
+                f"{self.website_url}: website, website_url, contents, created_at, updated_at "
                 f"can't be None or empty")
         if self.contents == '':
             raise ValueError(f"{self.website_url} contents can't be empty")

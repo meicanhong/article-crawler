@@ -222,6 +222,6 @@ class ArticleCrawler:
 
 
 if __name__ == '__main__':
-    url = 'https://followin.io/en'
-    crawler = ArticleCrawler(start_url=url, max_pages=5)
+    url = 'https://followin.io/en/feed/7757723'
+    crawler = ArticleCrawler(start_url=url, max_pages=1)
     crawler.run()
